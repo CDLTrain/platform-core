@@ -88,17 +88,31 @@ export async function POST(req: NextRequest) {
 
     return new Response("OK", { status: 200 });
   } catch (err: any) {
-  const msg =
-    err?.message ||
-    err?.toString?.() ||
-    "unknown_error";
+  // Try to extract useful info without leaking secrets
+  const safeErr = {
+    name: err?.name,
+    message: err?.message,
+    code: err?.code,
+    type: err?.type,
+    // Svix sometimes nests details
+    details: err?.details ?? err?.data ?? err?.response ?? err,
+  };
 
-  console.error("Staff webhook error:", { message: msg });
+  const serialized = (() => {
+    try {
+      return JSON.stringify(safeErr);
+    } catch {
+      return String(safeErr);
+    }
+  })();
 
-  // TEMP: return message to diagnose (remove after fixed)
-  return new Response(JSON.stringify({ ok: false, error: msg }), {
+  console.error("Staff webhook error (serialized):", serialized);
+
+  // TEMP: return serialized error to Clerk for diagnosis
+  return new Response(serialized, {
     status: 400,
     headers: { "content-type": "application/json" },
   });
 }
+
 }
