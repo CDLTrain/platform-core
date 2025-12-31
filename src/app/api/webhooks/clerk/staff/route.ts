@@ -24,6 +24,14 @@ export async function POST(req: NextRequest) {
     const payload = await req.text();
     const headers = getSvixHeaders(req);
 
+    console.log("DEBUG staff webhook:", {
+  hasSecret: Boolean(process.env.CLERK_STAFF_WEBHOOK_SECRET),
+  secretPrefix: (process.env.CLERK_STAFF_WEBHOOK_SECRET || "").slice(0, 6),
+  svixId: headers["svix-id"] ? "present" : "missing",
+  svixTimestamp: headers["svix-timestamp"] ? "present" : "missing",
+  svixSignature: headers["svix-signature"] ? "present" : "missing",
+});
+
     // Verify signature (rejects spoofed requests)
     const wh = new Webhook(secret);
     const evt = wh.verify(payload, headers) as any;
