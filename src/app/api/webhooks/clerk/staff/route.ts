@@ -21,7 +21,7 @@ function getSvixHeaders(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const secret = process.env.CLERK_STAFF_WEBHOOK_SECRET!;
-    const payload = await req.text();
+    const payload = Buffer.from(await req.arrayBuffer()).toString("utf8");
     const headers = getSvixHeaders(req);
 
     console.log("DEBUG staff webhook:", {
