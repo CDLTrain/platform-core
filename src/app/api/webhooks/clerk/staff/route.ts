@@ -97,8 +97,18 @@ export async function POST(req: NextRequest) {
       );
 
     return new Response("OK", { status: 200 });
-  } catch (err) {
-    console.error("Staff webhook error:", err);
-    return new Response("Bad Request", { status: 400 });
-  }
+  } catch (err: any) {
+  const msg =
+    err?.message ||
+    err?.toString?.() ||
+    "unknown_error";
+
+  console.error("Staff webhook error:", { message: msg });
+
+  // TEMP: return message to diagnose (remove after fixed)
+  return new Response(JSON.stringify({ ok: false, error: msg }), {
+    status: 400,
+    headers: { "content-type": "application/json" },
+  });
+}
 }
