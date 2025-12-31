@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { verifyWebhook } from "@clerk/nextjs/webhooks";
+import { Webhook } from "svix";
 import { createClient } from "@supabase/supabase-js";
 
 function supabaseAdmin() {
@@ -10,17 +10,29 @@ function supabaseAdmin() {
   });
 }
 
+function getSvixHeaders(req: NextRequest) {
+  return {
+    "svix-id": req.headers.get("svix-id") ?? "",
+    "svix-timestamp": req.headers.get("svix-timestamp") ?? "",
+    "svix-signature": req.headers.get("svix-signature") ?? "",
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const evt = await verifyWebhook(req, {
-      signingSecret: process.env.CLERK_STUDENT_WEBHOOK_SECRET,
-    });
+    const secret = process.env.CLERK_STUDENT_WEBHOOK_SECRET!;
+    const payload = await req.text();
+    const headers = getSvixHeaders(req);
+
+    const wh = new Webhook(secret);
+    const evt = wh.verify(payload, headers) as any;
 
     const sb = supabaseAdmin();
     const eventType = evt.type;
 
     const user = evt.data as any;
     const clerkUserId: string = user.id;
+
     const primaryEmail: string | null =
       user.email_addresses?.find((e: any) => e.id === user.primary_email_address_id)
         ?.email_address ?? user.email_addresses?.[0]?.email_address ?? null;
@@ -56,8 +68,6 @@ export async function POST(req: NextRequest) {
 
     if (upsertErr) throw upsertErr;
 
-    // For now, attach students to your default tenant.
-    // Later, we’ll assign students to the correct tenant via invite/enrollment flow.
     const tenantName = process.env.DEFAULT_TENANT_NAME!;
     const { data: tenant, error: tenantErr } = await sb
       .from("tenants")

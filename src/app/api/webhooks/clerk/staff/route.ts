@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { verifyWebhook } from "@clerk/nextjs/webhooks";
+import { Webhook } from "svix";
 import { createClient } from "@supabase/supabase-js";
 
 function supabaseAdmin() {
@@ -10,19 +10,30 @@ function supabaseAdmin() {
   });
 }
 
+function getSvixHeaders(req: NextRequest) {
+  return {
+    "svix-id": req.headers.get("svix-id") ?? "",
+    "svix-timestamp": req.headers.get("svix-timestamp") ?? "",
+    "svix-signature": req.headers.get("svix-signature") ?? "",
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // Verify webhook signature (prevents fake calls)
-    const evt = await verifyWebhook(req, {
-      signingSecret: process.env.CLERK_STAFF_WEBHOOK_SECRET,
-    });
+    const secret = process.env.CLERK_STAFF_WEBHOOK_SECRET!;
+    const payload = await req.text();
+    const headers = getSvixHeaders(req);
+
+    // Verify signature (rejects spoofed requests)
+    const wh = new Webhook(secret);
+    const evt = wh.verify(payload, headers) as any;
 
     const sb = supabaseAdmin();
     const eventType = evt.type;
 
-    // Clerk User object for user.* events
     const user = evt.data as any;
     const clerkUserId: string = user.id;
+
     const primaryEmail: string | null =
       user.email_addresses?.find((e: any) => e.id === user.primary_email_address_id)
         ?.email_address ?? user.email_addresses?.[0]?.email_address ?? null;
@@ -32,7 +43,6 @@ export async function POST(req: NextRequest) {
         ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim()
         : null;
 
-    // Soft-delete on user.deleted
     if (eventType === "user.deleted") {
       await sb
         .from("users")
@@ -42,7 +52,6 @@ export async function POST(req: NextRequest) {
       return new Response("OK", { status: 200 });
     }
 
-    // Upsert user row (create or update)
     const { data: upsertedUser, error: upsertErr } = await sb
       .from("users")
       .upsert(
@@ -60,7 +69,6 @@ export async function POST(req: NextRequest) {
 
     if (upsertErr) throw upsertErr;
 
-    // Find your default tenant by name
     const tenantName = process.env.DEFAULT_TENANT_NAME!;
     const { data: tenant, error: tenantErr } = await sb
       .from("tenants")
@@ -70,7 +78,6 @@ export async function POST(req: NextRequest) {
 
     if (tenantErr) throw tenantErr;
 
-    // Assign default staff role to that tenant (first bootstrap)
     const role = process.env.DEFAULT_STAFF_ROLE || "SuperAdmin";
     await sb
       .from("tenant_user_roles")
