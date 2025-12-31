@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { Webhook } from "svix";
 import { createClient } from "@supabase/supabase-js";

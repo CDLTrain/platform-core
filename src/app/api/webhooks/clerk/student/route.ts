@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { Webhook } from "svix";
 import { createClient } from "@supabase/supabase-js";
@@ -21,7 +23,7 @@ function getSvixHeaders(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const secret = process.env.CLERK_STUDENT_WEBHOOK_SECRET!;
-    const payload = await req.text();
+    const payload = Buffer.from(await req.arrayBuffer()).toString("utf8");
     const headers = getSvixHeaders(req);
 
     const wh = new Webhook(secret);
