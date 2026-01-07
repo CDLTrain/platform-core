@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
     // Verify signature (rejects spoofed requests)
     const wh = new Webhook(secret);
     const evt = wh.verify(payload, headers) as any;
+    console.log("CHECKPOINT 1: verified", { type: evt.type });
+
 
     const sb = supabaseAdmin();
     const eventType = evt.type;
@@ -77,7 +79,12 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
 
-    if (upsertErr) throw upsertErr;
+    if (upsertErr) {
+  console.error("CHECKPOINT 2 FAIL: users upsert", upsertErr);
+  throw new Error("users_upsert_failed: " + JSON.stringify(upsertErr));
+}
+console.log("CHECKPOINT 2: users upserted", { userId: upsertedUser?.id });
+
 
     const tenantName = process.env.DEFAULT_TENANT_NAME!;
     const { data: tenant, error: tenantErr } = await sb
@@ -86,15 +93,27 @@ export async function POST(req: NextRequest) {
       .eq("company_name", tenantName)
       .single();
 
-    if (tenantErr) throw tenantErr;
+    if (tenantErr) {
+  console.error("CHECKPOINT 3 FAIL: tenant lookup", tenantErr);
+  throw new Error("tenant_lookup_failed: " + JSON.stringify(tenantErr));
+}
+console.log("CHECKPOINT 3: tenant found", { tenantId: tenant?.id });
+
 
     const role = process.env.DEFAULT_STAFF_ROLE || "SuperAdmin";
-    await sb
-      .from("tenant_user_roles")
-      .upsert(
-        { tenant_id: tenant.id, user_id: upsertedUser.id, role },
-        { onConflict: "tenant_id,user_id" }
-      );
+    const { error: roleErr } = await sb
+  .from("tenant_user_roles")
+  .upsert(
+    { tenant_id: tenant.id, user_id: upsertedUser.id, role },
+    { onConflict: "tenant_id,user_id" }
+  );
+
+if (roleErr) {
+  console.error("CHECKPOINT 4 FAIL: role upsert", roleErr);
+  throw new Error("role_upsert_failed: " + JSON.stringify(roleErr));
+}
+console.log("CHECKPOINT 4: role assigned", { role });
+
 
     return new Response("OK", { status: 200 });
   } catch (err: any) {
