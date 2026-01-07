@@ -94,7 +94,7 @@ console.log("CHECKPOINT 3: tenant found", { tenantId: tenant?.id });
     const { error: roleErr } = await sb
   .from("tenant_user_roles")
   .upsert(
-    { tenant_id: tenant.id, user_id: upsertedUser.id, role },
+    { tenant_id: tenant.id, user_id: upsertedUser.id, role: "Student" },
     { onConflict: "tenant_id,user_id" }
   );
 
@@ -102,7 +102,7 @@ if (roleErr) {
   console.error("CHECKPOINT 4 FAIL: role upsert", roleErr);
   throw new Error("role_upsert_failed: " + JSON.stringify(roleErr));
 }
-console.log("CHECKPOINT 4: role assigned", { role });
+console.log("CHECKPOINT 4: role assigned", { role: "Student" });
 
 
     return new Response("OK", { status: 200 });
