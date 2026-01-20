@@ -34,7 +34,7 @@ export default function AssignRolePage() {
         (SuperAdmin) to bootstrap staff/student access.
       </p>
 
-      <form action="/api/admin/assign-role" method="post" style={{ marginTop: 24 }}>
+      <form action="/api/staff/admin/assign-role" method="post" style={{ marginTop: 24 }}>
         <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>User email</label>
         <input
           name="email"
