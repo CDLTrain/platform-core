@@ -10,9 +10,10 @@ export default clerkMiddleware(async (auth, req) => {
   if (isAdminRoute(req)) {
     const { userId } = await auth();
 
-    // Not logged in → redirect to Clerk sign-in
-    if (!userId) {
-      return NextResponse.redirect(new URL("/sign-in", req.url));
+   if (!userId) {
+  const signInUrl = new URL("/sign-in", req.url);
+  signInUrl.searchParams.set("redirect_url", req.url);
+  return NextResponse.redirect(signInUrl);
     }
   }
 });
