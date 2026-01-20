@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
 import { NextRequest } from "next/server";
 import { Webhook } from "svix";
 import { createClient } from "@supabase/supabase-js";
@@ -28,8 +29,6 @@ export async function POST(req: NextRequest) {
 
     const wh = new Webhook(secret);
     const evt = wh.verify(payload, headers) as any;
-    console.log("CHECKPOINT 1: verified", { type: evt.type });
-
 
     const sb = supabaseAdmin();
     const eventType = evt.type;
@@ -38,8 +37,11 @@ export async function POST(req: NextRequest) {
     const clerkUserId: string = user.id;
 
     const primaryEmail: string | null =
-      user.email_addresses?.find((e: any) => e.id === user.primary_email_address_id)
-        ?.email_address ?? user.email_addresses?.[0]?.email_address ?? null;
+      user.email_addresses?.find(
+        (e: any) => e.id === user.primary_email_address_id
+      )?.email_address ??
+      user.email_addresses?.[0]?.email_address ??
+      null;
 
     const fullName =
       user.first_name || user.last_name
@@ -70,13 +72,9 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
 
-    if (upsertErr) {
-  console.error("CHECKPOINT 2 FAIL: users upsert", upsertErr);
-  throw new Error("users_upsert_failed: " + JSON.stringify(upsertErr));
-}
-console.log("CHECKPOINT 2: users upserted", { userId: upsertedUser?.id });
+    if (upsertErr) throw upsertErr;
 
-
+    // Temporary: attach students to your default tenant
     const tenantName = process.env.DEFAULT_TENANT_NAME!;
     const { data: tenant, error: tenantErr } = await sb
       .from("tenants")
@@ -84,54 +82,18 @@ console.log("CHECKPOINT 2: users upserted", { userId: upsertedUser?.id });
       .eq("company_name", tenantName)
       .single();
 
-    if (tenantErr) {
-  console.error("CHECKPOINT 3 FAIL: tenant lookup", tenantErr);
-  throw new Error("tenant_lookup_failed: " + JSON.stringify(tenantErr));
-}
-console.log("CHECKPOINT 3: tenant found", { tenantId: tenant?.id });
+    if (tenantErr) throw tenantErr;
 
+    const { error: roleErr } = await sb.from("tenant_user_roles").upsert(
+      { tenant_id: tenant.id, user_id: upsertedUser.id, role: "Student" },
+      { onConflict: "tenant_id,user_id" }
+    );
 
-    const { error: roleErr } = await sb
-  .from("tenant_user_roles")
-  .upsert(
-    { tenant_id: tenant.id, user_id: upsertedUser.id, role: "Student" },
-    { onConflict: "tenant_id,user_id" }
-  );
-
-if (roleErr) {
-  console.error("CHECKPOINT 4 FAIL: role upsert", roleErr);
-  throw new Error("role_upsert_failed: " + JSON.stringify(roleErr));
-}
-console.log("CHECKPOINT 4: role assigned", { role: "Student" });
-
+    if (roleErr) throw roleErr;
 
     return new Response("OK", { status: 200 });
-  } catch (err: any) {
-  // Try to extract useful info without leaking secrets
-  const safeErr = {
-    name: err?.name,
-    message: err?.message,
-    code: err?.code,
-    type: err?.type,
-    // Svix sometimes nests details
-    details: err?.details ?? err?.data ?? err?.response ?? err,
-  };
-
-  const serialized = (() => {
-    try {
-      return JSON.stringify(safeErr);
-    } catch {
-      return String(safeErr);
-    }
-  })();
-
-  console.error("Staff webhook error (serialized):", serialized);
-
-  // TEMP: return serialized error to Clerk for diagnosis
-  return new Response(serialized, {
-    status: 400,
-    headers: { "content-type": "application/json" },
-  });
-}
-
+  } catch (err) {
+    console.error("Student webhook error:", err);
+    return new Response("Bad Request", { status: 400 });
+  }
 }

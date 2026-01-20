@@ -1,15 +1,11 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
 import { NextRequest } from "next/server";
 import { Webhook } from "svix";
 import { createClient } from "@supabase/supabase-js";
 
 function supabaseAdmin() {
-  console.log("DEBUG supabase target:", {
-  urlPrefix: (process.env.SUPABASE_URL || "").slice(0, 35),
-  hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-});
-
   const url = process.env.SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, {
@@ -27,39 +23,34 @@ function getSvixHeaders(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 1) Verify request is really from Clerk (Svix-signed)
     const secret = process.env.CLERK_STAFF_WEBHOOK_SECRET!;
     const payload = Buffer.from(await req.arrayBuffer()).toString("utf8");
     const headers = getSvixHeaders(req);
 
-    console.log("DEBUG staff webhook:", {
-  hasSecret: Boolean(process.env.CLERK_STAFF_WEBHOOK_SECRET),
-  secretPrefix: (process.env.CLERK_STAFF_WEBHOOK_SECRET || "").slice(0, 6),
-  svixId: headers["svix-id"] ? "present" : "missing",
-  svixTimestamp: headers["svix-timestamp"] ? "present" : "missing",
-  svixSignature: headers["svix-signature"] ? "present" : "missing",
-});
-
-    // Verify signature (rejects spoofed requests)
     const wh = new Webhook(secret);
     const evt = wh.verify(payload, headers) as any;
-    console.log("CHECKPOINT 1: verified", { type: evt.type });
-
 
     const sb = supabaseAdmin();
     const eventType = evt.type;
 
+    // Clerk user payload
     const user = evt.data as any;
     const clerkUserId: string = user.id;
 
     const primaryEmail: string | null =
-      user.email_addresses?.find((e: any) => e.id === user.primary_email_address_id)
-        ?.email_address ?? user.email_addresses?.[0]?.email_address ?? null;
+      user.email_addresses?.find(
+        (e: any) => e.id === user.primary_email_address_id
+      )?.email_address ??
+      user.email_addresses?.[0]?.email_address ??
+      null;
 
     const fullName =
       user.first_name || user.last_name
         ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim()
         : null;
 
+    // 2) Soft delete
     if (eventType === "user.deleted") {
       await sb
         .from("users")
@@ -69,6 +60,7 @@ export async function POST(req: NextRequest) {
       return new Response("OK", { status: 200 });
     }
 
+    // 3) Upsert user in registry DB
     const { data: upsertedUser, error: upsertErr } = await sb
       .from("users")
       .upsert(
@@ -84,13 +76,9 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
 
-    if (upsertErr) {
-  console.error("CHECKPOINT 2 FAIL: users upsert", upsertErr);
-  throw new Error("users_upsert_failed: " + JSON.stringify(upsertErr));
-}
-console.log("CHECKPOINT 2: users upserted", { userId: upsertedUser?.id });
+    if (upsertErr) throw upsertErr;
 
-
+    // 4) Bootstrap staff role into the default tenant (temporary bootstrap behavior)
     const tenantName = process.env.DEFAULT_TENANT_NAME!;
     const { data: tenant, error: tenantErr } = await sb
       .from("tenants")
@@ -98,55 +86,19 @@ console.log("CHECKPOINT 2: users upserted", { userId: upsertedUser?.id });
       .eq("company_name", tenantName)
       .single();
 
-    if (tenantErr) {
-  console.error("CHECKPOINT 3 FAIL: tenant lookup", tenantErr);
-  throw new Error("tenant_lookup_failed: " + JSON.stringify(tenantErr));
-}
-console.log("CHECKPOINT 3: tenant found", { tenantId: tenant?.id });
-
+    if (tenantErr) throw tenantErr;
 
     const role = process.env.DEFAULT_STAFF_ROLE || "SuperAdmin";
-    const { error: roleErr } = await sb
-  .from("tenant_user_roles")
-  .upsert(
-    { tenant_id: tenant.id, user_id: upsertedUser.id, role },
-    { onConflict: "tenant_id,user_id" }
-  );
+    const { error: roleErr } = await sb.from("tenant_user_roles").upsert(
+      { tenant_id: tenant.id, user_id: upsertedUser.id, role },
+      { onConflict: "tenant_id,user_id" }
+    );
 
-if (roleErr) {
-  console.error("CHECKPOINT 4 FAIL: role upsert", roleErr);
-  throw new Error("role_upsert_failed: " + JSON.stringify(roleErr));
-}
-console.log("CHECKPOINT 4: role assigned", { role });
-
+    if (roleErr) throw roleErr;
 
     return new Response("OK", { status: 200 });
-  } catch (err: any) {
-  // Try to extract useful info without leaking secrets
-  const safeErr = {
-    name: err?.name,
-    message: err?.message,
-    code: err?.code,
-    type: err?.type,
-    // Svix sometimes nests details
-    details: err?.details ?? err?.data ?? err?.response ?? err,
-  };
-
-  const serialized = (() => {
-    try {
-      return JSON.stringify(safeErr);
-    } catch {
-      return String(safeErr);
-    }
-  })();
-
-  console.error("Staff webhook error (serialized):", serialized);
-
-  // TEMP: return serialized error to Clerk for diagnosis
-  return new Response(serialized, {
-    status: 400,
-    headers: { "content-type": "application/json" },
-  });
-}
-
+  } catch (err) {
+    console.error("Staff webhook error:", err);
+    return new Response("Bad Request", { status: 400 });
+  }
 }
