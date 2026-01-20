@@ -5,6 +5,11 @@ import { Webhook } from "svix";
 import { createClient } from "@supabase/supabase-js";
 
 function supabaseAdmin() {
+  console.log("DEBUG supabase target:", {
+  urlPrefix: (process.env.SUPABASE_URL || "").slice(0, 35),
+  hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+});
+
   const url = process.env.SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, {
