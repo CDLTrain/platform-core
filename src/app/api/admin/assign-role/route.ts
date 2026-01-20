@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 
 type Role =
@@ -37,14 +38,13 @@ function supabaseAdmin() {
 
 export async function POST(req: NextRequest) {
   try {
-    const form = await req.formData();
-    const email = String(form.get("email") || "").trim().toLowerCase();
-    const role = String(form.get("role") || "").trim() as Role;
-    const adminToken = String(form.get("adminToken") || "");
-
-if (!process.env.ADMIN_ASSIGN_TOKEN || adminToken !== process.env.ADMIN_ASSIGN_TOKEN) {
+    const { userId } = await auth();
+if (!userId) {
   return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 }
+const form = await req.formData();
+    const email = String(form.get("email") || "").trim().toLowerCase();
+    const role = String(form.get("role") || "").trim() as Role;
 
     if (!email) return NextResponse.json({ ok: false, error: "Missing email" }, { status: 400 });
     if (!VALID_ROLES.has(role))
@@ -55,7 +55,34 @@ if (!process.env.ADMIN_ASSIGN_TOKEN || adminToken !== process.env.ADMIN_ASSIGN_T
       return NextResponse.json({ ok: false, error: "Missing DEFAULT_TENANT_ID" }, { status: 500 });
 
     const sb = supabaseAdmin();
-    
+    const { data: me, error: meErr } = await sb
+  .from("users")
+  .select("id")
+  .eq("clerk_user_id", userId)
+  .single();
+
+if (meErr || !me) {
+  return NextResponse.json(
+    { ok: false, error: "Your account is not synced to the registry yet." },
+    { status: 403 }
+  );
+}
+
+const tenantId = process.env.DEFAULT_TENANT_ID;
+if (!tenantId)
+  return NextResponse.json({ ok: false, error: "Missing DEFAULT_TENANT_ID" }, { status: 500 });
+
+const { data: myRole, error: myRoleErr } = await sb
+  .from("tenant_user_roles")
+  .select("role")
+  .eq("tenant_id", tenantId)
+  .eq("user_id", me.id)
+  .single();
+
+if (myRoleErr || !myRole || myRole.role !== "SuperAdmin") {
+  return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+}
+
 
     // Find user by email
     const { data: user, error: userErr } = await sb

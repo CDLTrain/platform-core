@@ -35,7 +35,6 @@ export default function AssignRolePage() {
       </p>
 
       <form action="/api/admin/assign-role" method="post" style={{ marginTop: 24 }}>
-      <input type="hidden" name="adminToken" value={process.env.ADMIN_ASSIGN_TOKEN ?? ""} />
         <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>User email</label>
         <input
           name="email"
