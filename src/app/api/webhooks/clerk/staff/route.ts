@@ -77,6 +77,27 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (upsertErr) throw upsertErr;
+// Bootstrap: if no SuperAdmin exists yet for the default tenant,
+// grant SuperAdmin to the first synced staff user only.
+const tenantId = process.env.DEFAULT_TENANT_ID;
+
+if (tenantId) {
+  const { data: existingSA } = await sb
+    .from("tenant_user_roles")
+    .select("user_id")
+    .eq("tenant_id", tenantId)
+    .eq("role", "SuperAdmin")
+    .limit(1);
+
+  if (!existingSA || existingSA.length === 0) {
+    await sb
+      .from("tenant_user_roles")
+      .upsert(
+        { tenant_id: tenantId, user_id: upsertedUser.id, role: "SuperAdmin" },
+        { onConflict: "tenant_id,user_id" }
+      );
+  }
+}
 
     // Invite-only model: do NOT assign a role automatically.
     return new Response("OK", { status: 200 });
