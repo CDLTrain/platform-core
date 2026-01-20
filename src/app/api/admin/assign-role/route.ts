@@ -68,10 +68,6 @@ if (meErr || !me) {
   );
 }
 
-const tenantId = process.env.DEFAULT_TENANT_ID;
-if (!tenantId)
-  return NextResponse.json({ ok: false, error: "Missing DEFAULT_TENANT_ID" }, { status: 500 });
-
 const { data: myRole, error: myRoleErr } = await sb
   .from("tenant_user_roles")
   .select("role")
