@@ -30,11 +30,12 @@ export default function AssignRolePage() {
     <main style={{ maxWidth: 720, margin: "40px auto", padding: 16, fontFamily: "system-ui" }}>
       <h1 style={{ fontSize: 28, fontWeight: 700 }}>Assign Role (Admin)</h1>
       <p style={{ marginTop: 8, lineHeight: 1.4 }}>
-        This page assigns a role inside your default tenant. For now it’s a simple tool for you
+         This page assigns a role inside your default tenant. For now it’s a simple tool for you
         (SuperAdmin) to bootstrap staff/student access.
       </p>
 
       <form action="/api/admin/assign-role" method="post" style={{ marginTop: 24 }}>
+      <input type="hidden" name="adminToken" value={process.env.ADMIN_ASSIGN_TOKEN ?? ""} />
         <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>User email</label>
         <input
           name="email"

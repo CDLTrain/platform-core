@@ -40,6 +40,11 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const email = String(form.get("email") || "").trim().toLowerCase();
     const role = String(form.get("role") || "").trim() as Role;
+    const adminToken = String(form.get("adminToken") || "");
+
+if (!process.env.ADMIN_ASSIGN_TOKEN || adminToken !== process.env.ADMIN_ASSIGN_TOKEN) {
+  return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+}
 
     if (!email) return NextResponse.json({ ok: false, error: "Missing email" }, { status: 400 });
     if (!VALID_ROLES.has(role))
@@ -50,6 +55,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Missing DEFAULT_TENANT_ID" }, { status: 500 });
 
     const sb = supabaseAdmin();
+    
 
     // Find user by email
     const { data: user, error: userErr } = await sb
