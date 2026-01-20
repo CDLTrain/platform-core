@@ -78,24 +78,7 @@ export async function POST(req: NextRequest) {
 
     if (upsertErr) throw upsertErr;
 
-    // 4) Bootstrap staff role into the default tenant (temporary bootstrap behavior)
-    const tenantName = process.env.DEFAULT_TENANT_NAME!;
-    const { data: tenant, error: tenantErr } = await sb
-      .from("tenants")
-      .select("id")
-      .eq("company_name", tenantName)
-      .single();
-
-    if (tenantErr) throw tenantErr;
-
-    const role = process.env.DEFAULT_STAFF_ROLE || "SuperAdmin";
-    const { error: roleErr } = await sb.from("tenant_user_roles").upsert(
-      { tenant_id: tenant.id, user_id: upsertedUser.id, role },
-      { onConflict: "tenant_id,user_id" }
-    );
-
-    if (roleErr) throw roleErr;
-
+    // Invite-only model: do NOT assign a role automatically.
     return new Response("OK", { status: 200 });
   } catch (err) {
     console.error("Staff webhook error:", err);
