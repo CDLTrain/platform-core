@@ -29,15 +29,26 @@ export default clerkMiddleware(async (auth, req) => {
   const isStaff = publicMetadata?.isStaff === true;
   const isStudent = publicMetadata?.isStudent === true;
 
-  // Staff routes/APIs require isStaff
+    // Staff routes/APIs require isStaff
   if (isStaffRoute(req) && !isStaff) {
-    return NextResponse.redirect(new URL("/student", req.url));
+    // If they ARE a student, send them to the student app
+    if (isStudent) {
+      return NextResponse.redirect(new URL("/student", req.url));
+    }
+    // Otherwise they have no access yet
+    return NextResponse.redirect(new URL("/no-access", req.url));
   }
 
   // Student routes/APIs require isStudent
   if (isStudentRoute(req) && !isStudent) {
-    return NextResponse.redirect(new URL("/staff", req.url));
+    // If they ARE staff, send them to the staff app
+    if (isStaff) {
+      return NextResponse.redirect(new URL("/staff", req.url));
+    }
+    // Otherwise they have no access yet (not enrolled)
+    return NextResponse.redirect(new URL("/no-access", req.url));
   }
+
 
   return NextResponse.next();
 });
